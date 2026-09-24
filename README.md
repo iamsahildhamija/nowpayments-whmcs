@@ -1,75 +1,166 @@
 # NOWPayments WHMCS Gateway — Compatibility Rebuild v1.0.2
 
-This package is a compatibility/security rebuild of the old 2019 NOWPayments WHMCS gateway for a modern WHMCS 8/9 + PHP 8.x environment.
+This package is a compatibility and security rebuild of the original 2019 NOWPayments WHMCS gateway for modern WHMCS 8/9 and PHP 8.x environments.
 
 ## Disclaimer
 
-This is an independent community-maintained compatibility rebuild of the
-NOWPayments WHMCS gateway and is not an official NOWPayments product.
+This is an independent, community-maintained compatibility rebuild of the NOWPayments WHMCS gateway.
+
+It is **not** an official NOWPayments product.
 
 NOWPayments and WHMCS are trademarks of their respective owners.
 
-This project is provided as-is without warranty. Please review the upstream
-software licensing terms before redistributing or relicensing any code derived
-from the original gateway.
+This project is provided as-is without warranty. Review the applicable upstream software licensing terms before redistributing or relicensing code derived from the original gateway.
 
-## Changelog
+## Architecture
 
-- Uses WHMCS gateway API metadata version `1.1` (the currently documented third-party gateway API version).
-- Keeps the NOWPayments API key server-side. The old module exposed it in a browser URL.
-- Creates a modern NOWPayments hosted invoice through `POST https://api.nowpayments.io/v1/invoice` only after the customer clicks Pay Now.
-- Uses the current WHMCS callback workflow (`checkCbInvoiceID`, `checkCbTransID`, `logTransaction`, `addInvoicePayment`).
-- Reads JSON IPN data correctly instead of relying on `$_POST`.
-- Performs deep-key HMAC-SHA512 verification of `X-NOWPAYMENTS-SIG`.
-- Preserves original JSON number tokens during IPN canonicalisation, avoiding PHP float/scientific-notation signature mismatches.
-- Uses constant-time signature comparison with `hash_equals()`.
-- Does not mark `partially_paid`, `waiting`, `confirming`, `confirmed`, or `sending` states as paid. WHMCS is credited only after NOWPayments reports `finished`.
-- Prevents duplicate payment application using WHMCS `checkCbTransID()`.
-- Uses proper HTTPS/cURL verification and reasonable request timeouts.
-- Removes macOS `.DS_Store` / `__MACOSX` junk from the package.
+This is an **invoice-driven** cryptocurrency payment gateway.
+
+WHMCS remains responsible for products, billing cycles, renewals, invoice totals, coupons, taxes, and service provisioning. NOWPayments is used to create the hosted payment invoice and process the cryptocurrency payment.
+
+The NOWPayments API key remains server-side.
+
+A hosted NOWPayments invoice is created through:
+
+```text
+POST https://api.nowpayments.io/v1/invoice
+```
+
+The API request is made only after the customer clicks **Pay Now**.
+
+The module automatically sends the WHMCS callback URL when creating the NOWPayments invoice:
+
+```text
+https://YOUR-WHMCS-DOMAIN/modules/gateways/callback/nowpayments.php
+```
+
+Payment status updates are received through NOWPayments IPN callbacks.
+
+WHMCS is credited only after NOWPayments reports the payment status as:
+
+```text
+finished
+```
+
+Intermediate statuses such as `partially_paid`, `waiting`, `confirming`, `confirmed`, and `sending` do **not** mark the WHMCS invoice as Paid.
 
 ## Environment
 
-Designed for WHMCS 8x / 9.0 and PHP 8.2 / 8.3. The code intentionally avoids Composer or third-party PHP dependencies.
+The module is designed for:
+
+* WHMCS 8.x
+* WHMCS 9.0
+* PHP 8.2
+* PHP 8.3
+
+The code intentionally avoids Composer and other third-party PHP dependencies.
 
 ## Installation
 
-Copy the included `modules/` directory into the root of your WHMCS installation, preserving paths:
+Upload the contents of the included `modules/` directory into the matching WHMCS `modules/` directory while preserving the paths:
 
-- `modules/gateways/nowpayments.php`
-- `modules/gateways/nowpayments/lib.php`
-- `modules/gateways/nowpayments/pay.php`
-- `modules/gateways/nowpayments/logo.png`
-- `modules/gateways/nowpayments/whmcs.json`
-- `modules/gateways/callback/nowpayments.php`
+* `modules/gateways/nowpayments.php`
+* `modules/gateways/nowpayments/lib.php`
+* `modules/gateways/nowpayments/pay.php`
+* `modules/gateways/nowpayments/logo.png`
+* `modules/gateways/nowpayments/whmcs.json`
+* `modules/gateways/callback/nowpayments.php`
 
-Then in WHMCS:
+Then configure the gateway in WHMCS:
 
-1. Go to **Configuration / System Settings > Payment Gateways** (wording depends on WHMCS theme/version).
+1. Go to **Configuration / System Settings > Payment Gateways**. The exact wording may vary depending on the WHMCS theme or version.
 2. Activate **NOWPayments**.
-3. Enter the **API Key** and **IPN Secret** from your NOWPayments dashboard.
-4. Ensure WHMCS **System URL** is correct and uses HTTPS.
-5. Save changes.
+3. Enter the **API Key** from the NOWPayments dashboard.
+4. Enter the **IPN Secret** from the NOWPayments dashboard.
+5. Confirm that the WHMCS **System URL** is correct and uses HTTPS.
+6. Save the gateway configuration.
 
-The module passes the callback URL automatically when it creates each NOWPayments invoice:
+No Composer package or vendor directory is required.
 
-`https://YOUR-WHMCS-DOMAIN/modules/gateways/callback/nowpayments.php`
+## Testing
 
-## Test
+Create a low-value WHMCS invoice and complete one real payment.
 
-Create a low-value WHMCS invoice and complete one real payment. Confirm all four items:
+Confirm all of the following:
 
-1. Customer is redirected to the hosted NOWPayments invoice.
-2. Payment appears in NOWPayments.
-3. WHMCS **Gateway Log** receives status callbacks.
-4. After NOWPayments status becomes `finished`, the WHMCS invoice becomes Paid exactly once.
+1. The customer is redirected to the hosted NOWPayments invoice.
+2. The payment appears correctly in the NOWPayments dashboard.
+3. WHMCS **Gateway Log** receives the NOWPayments status callbacks.
+4. Intermediate payment statuses do not mark the WHMCS invoice as Paid.
+5. After NOWPayments reports `finished`, the WHMCS invoice becomes Paid.
+6. The payment is applied to the WHMCS invoice exactly once.
+7. A duplicate or retried IPN does not create a second payment.
 
-If status callbacks do not arrive, verify that Cloudflare/server firewall rules allow NOWPayments webhook requests and that the callback URL is publicly reachable over HTTPS.
+If status callbacks do not arrive, verify that:
 
-## Behavior
+* The callback URL is publicly reachable over HTTPS.
+* Cloudflare rules are not blocking NOWPayments.
+* Server firewall rules allow NOWPayments webhook requests.
 
-The module deliberately does **not** credit `partially_paid` callbacks. NOWPayments can later move the same `payment_id` to `finished`; applying a partial transaction too early can cause duplicate-transaction conflicts or incorrect invoice balances.
+## Security and payment integrity
+
+The module includes several changes to improve compatibility and payment integrity compared with the original gateway:
+
+* Uses WHMCS gateway API metadata version `1.1`, the currently documented third-party gateway API version.
+* Keeps the NOWPayments API key server-side instead of exposing it through a browser URL.
+* Uses the current WHMCS callback workflow:
+
+  * `checkCbInvoiceID`
+  * `checkCbTransID`
+  * `logTransaction`
+  * `addInvoicePayment`
+* Reads JSON IPN request bodies instead of relying on `$_POST`.
+* Performs deep-key HMAC-SHA512 verification of `X-NOWPAYMENTS-SIG`.
+* Preserves original JSON number tokens during IPN canonicalisation to avoid PHP float or scientific-notation signature mismatches.
+* Uses constant-time signature comparison through `hash_equals()`.
+* Uses the NOWPayments `payment_id` with WHMCS duplicate-transaction protection.
+* Keeps HTTPS and cURL certificate verification enabled.
+* Uses reasonable API request timeouts.
+
+## Payment status behavior
+
+The module deliberately does **not** credit the WHMCS invoice when NOWPayments reports:
+
+* `partially_paid`
+* `waiting`
+* `confirming`
+* `confirmed`
+* `sending`
+
+WHMCS is credited only when NOWPayments reports:
+
+```text
+finished
+```
+
+NOWPayments can later move the same `payment_id` from an intermediate state such as `partially_paid` to `finished`.
+
+Applying a partial transaction too early can cause duplicate-transaction conflicts or incorrect WHMCS invoice balances when the final callback arrives.
+
+For this reason, intermediate payment states are logged but are not treated as completed WHMCS payments.
+
+## Changelog
+
+This compatibility/security rebuild includes the following changes:
+
+* Updated the module for modern WHMCS 8/9 and PHP 8.x environments.
+* Uses WHMCS gateway API metadata version `1.1`.
+* Keeps the NOWPayments API key server-side.
+* Replaced the old browser-URL payment flow with the current hosted NOWPayments invoice API.
+* Creates invoices through `POST https://api.nowpayments.io/v1/invoice` only after the customer clicks **Pay Now**.
+* Updated the callback implementation to use the current WHMCS callback workflow.
+* Reads NOWPayments IPNs from the JSON request body.
+* Added deep-key HMAC-SHA512 signature verification.
+* Added preservation of original JSON number tokens during signature canonicalisation.
+* Added constant-time signature comparison with `hash_equals()`.
+* Changed payment handling so only the `finished` status credits WHMCS.
+* Added duplicate-payment protection through `checkCbTransID()`.
+* Keeps proper HTTPS/cURL verification enabled.
+* Added reasonable API request timeouts.
+* Removed macOS `.DS_Store` and `__MACOSX` files from the package.
 
 ## Note
 
-This gateway only creates customer payment invoices and receives IPNs. Custody/primary balance/payout wallet/withdrawal whitelisting remain account-level NOWPayments settings and do not need to be embedded in this module.
+This module only creates customer payment invoices and processes NOWPayments IPN callbacks.
+
+NOWPayments account-level settings such as custody, primary balance, payout wallet, and withdrawal whitelisting remain outside the WHMCS gateway module and do not need to be embedded in the code.
