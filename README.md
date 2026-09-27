@@ -1,4 +1,4 @@
-# NOWPayments WHMCS Gateway — Compatibility Rebuild v1.0.2
+# NOWPayments Module for WHMCS 8.x / 9.x
 
 This package is a compatibility and security rebuild of the original 2019 NOWPayments WHMCS gateway for modern WHMCS 8/9 and PHP 8.x environments.
 
