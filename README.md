@@ -97,7 +97,7 @@ If status callbacks do not arrive, verify that:
 * Cloudflare rules are not blocking NOWPayments.
 * Server firewall rules allow NOWPayments webhook requests.
 
-## Security and payment integrity
+## Security
 
 The module includes several changes to improve compatibility and payment integrity compared with the original gateway:
 
@@ -117,7 +117,7 @@ The module includes several changes to improve compatibility and payment integri
 * Keeps HTTPS and cURL certificate verification enabled.
 * Uses reasonable API request timeouts.
 
-## Payment status behavior
+## Behavior
 
 The module deliberately does **not** credit the WHMCS invoice when NOWPayments reports:
 
